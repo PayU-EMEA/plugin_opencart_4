@@ -1,0 +1,2 @@
+# exclude from the generated zip
+.git*           export-ignore
