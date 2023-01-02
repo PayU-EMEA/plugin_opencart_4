@@ -26,8 +26,19 @@ systemie PayU - [**Zarejestruj się**][ext6]
 Do prawidłowego funkcjonowania modułu wymagane są następujące rozszerzenia PHP: [cURL][ext3] i [hash][ext4].
 
 ## Instalacja
+1. Pobierz najnowszą wersję z https://github.com/PayU-EMEA/plugin_opencart_4/releases/, plik `payu.ocmod.zip`
+2. W panelu administracyjnym OpenCart:
+   * przejdź do `Extensions` » `Installer`
+   * w prawym górnym narożniku wybierz ikonę `Upload` i załaduj plik z punku `1.`
+   * na liście kliknij w ikonę `Install` (zielony plus) przy `PayU`
+   * przejdź do `Extensions` » `Extensions`
+   * ustaw filtr na `Payments` na liście kliknij w ikonę `Install` (zielony plus) przy `PayU`
 
 ## Konfiguracja
+1. Przejdź do strony administracyjnej swojego sklepu OpenCart
+2. przejdź do `Extensions` » `Extensions`
+3. ustaw filtr na `Payments`
+4. znajdź na liście `PayU` i kliknij w ikonę `Edit`.
 
 #### Parametry konfiguracyjne
 
