@@ -178,24 +178,125 @@ class PayU extends \Opencart\System\Engine\Controller
         $ocr['description'] = $this->language->get('text_payu_order') . ' #' . $order_info['order_id'];
         $ocr['customerIp'] = $this->getIP($order_info['ip']);
         $ocr['notifyUrl'] = $this->url->link('extension/payu/payment/payu' . urlencode('|') . 'webhook', '', true);
-        $ocr['continueUrl'] = $this->url->link('checkout/success', 'language=' . $this->config->get('config_language'), true);
+        $ocr['continueUrl'] = $this->url->link('checkout/success', [], true);
         $ocr['currencyCode'] = $order_info['currency_code'];
         $ocr['totalAmount'] = $this->toAmount(
             $this->currencyFormat($order_info['total'], $order_info['currency_code'])
         );
         $ocr['extOrderId'] = uniqid($order_info['order_id'] . '_', true);
+        $ocr['buyer'] = $this->getBuyer($order_info);
+        $ocr['products'] = $this->getProducts($order_info['order_id']);
 
-        if (!empty($order_info['email'])) {
-            $ocr['buyer'] = [
-                'email' => $order_info['email'],
-                'firstName' => $order_info['firstname'],
-                'lastName' => $order_info['lastname']
-            ];
+        $threeDsAuthentication = $this->getThreeDsAuthentication($order_info);
+
+        if ($threeDsAuthentication !== null) {
+            $ocr['threeDsAuthentication'] = $threeDsAuthentication;
         }
 
         return $ocr;
     }
 
+    private function getThreeDsAuthentication(array $order_info): array | null
+    {
+        $threeDsAuthentication = null;
+
+        $name = (!empty($order_info['payment_firstname']) ? $order_info['payment_firstname'] : $order_info['firstname']). ' ' . (!empty($order_info['payment_lastname']) ? $order_info['payment_lastname'] :$order_info['lastname']);
+        $address1 = !empty($order_info['payment_address_1']) ? $order_info['payment_address_1'] : $order_info['shipping_address_1'];
+        $address2 = !empty($order_info['payment_address_2']) ? $order_info['payment_address_2'] : $order_info['shipping_address_2'];
+        $address = $address1 . (!empty($address2) ? ' ' . $address1 : '');
+        $postalCode = !empty($order_info['payment_postcode']) ? $order_info['payment_postcode'] : $order_info['shipping_postcode'];
+        $city = !empty($order_info['payment_city']) ? $order_info['payment_city'] : $order_info['shipping_city'];;
+        $countryCode = !empty($order_info['payment_iso_code_2']) ? $order_info['payment_iso_code_2'] : $order_info['shipping_iso_code_2'];;
+
+        $isBillingAddress = !empty($address) || !empty($postalCode) || !empty($city) || (!empty($countryCode) && strlen($countryCode) === 2);
+
+        if (!empty($name) || $isBillingAddress) {
+            $threeDsAuthentication = [
+                'cardholder' => []
+            ];
+
+            if (!empty($name)) {
+                $threeDsAuthentication['cardholder']['name'] = mb_substr($name, 0, 50);
+            }
+
+            if ($isBillingAddress) {
+                $threeDsAuthentication['cardholder']['billingAddress'] = [];
+            }
+
+            if (!empty($countryCode) && strlen($countryCode) === 2) {
+                $threeDsAuthentication['cardholder']['billingAddress']['countryCode'] = $countryCode;
+            }
+
+            if (!empty($address)) {
+                $threeDsAuthentication['cardholder']['billingAddress']['street'] = mb_substr($address, 0, 50);
+            }
+
+            if (!empty($city)) {
+                $threeDsAuthentication['cardholder']['billingAddress']['city'] = mb_substr($city, 0, 50);
+            }
+
+            if (!empty($postalCode)) {
+                $threeDsAuthentication['cardholder']['billingAddress']['postalCode'] = mb_substr($postalCode, 0, 16);
+            }
+        }
+        return $threeDsAuthentication;
+    }
+
+    private function getBuyer(array $order_info): array
+    {
+        $buyer = [
+            'email' => $order_info['email'],
+            'firstName' => !empty($order_info['payment_firstname']) ? $order_info['payment_firstname'] : $order_info['firstname'],
+            'lastName' => !empty($order_info['payment_lastname']) ? $order_info['payment_lastname'] :$order_info['lastname'],
+            'language' => locale_parse($this->config->get('config_language'))['language']
+        ];
+
+        if (!empty($order_info['telephone'])) {
+            $buyer['phone'] = $order_info['telephone'];
+        }
+
+        if (!empty($order_info['shipping_code'])) {
+            $buyer['delivery'] = [
+                'street' => $order_info['shipping_address_1'] . (!empty($order_info['shipping_address_2']) ? ' ' . $order_info['shipping_address_1'] : ''),
+                'city' => $order_info['shipping_city']
+            ];
+
+            if (!empty($order_info['shipping_postcode'])) {
+                $buyer['delivery']['postalCode'] = $order_info['shipping_postcode'];
+            }
+
+            if ($order_info['shipping_iso_code_2']) {
+                $buyer['delivery']['countryCode'] = $order_info['shipping_iso_code_2'];
+            }
+        }
+
+        return $buyer;
+    }
+
+    private function getProducts(int $orderId): array
+    {
+        $products = [];
+
+        foreach ($this->model_checkout_order->getProducts($orderId) as $item) {
+            $products[] = [
+                'name' => mb_substr($item['name'], 0, 255),
+                'unitPrice' => $this->toAmount($item['price']),
+                'quantity' => $item['quantity'],
+            ];
+        }
+
+        foreach ($this->model_checkout_order->getTotals($orderId) as $item) {
+            if ($item['code'] === 'shipping') {
+                $products[] = [
+                    'name' => mb_substr('Shipment' . ' [' . $item['title'] . ']', 0, 255),
+                    'unitPrice' => $this->toAmount($item['value']),
+                    'quantity' => 1,
+                ];
+            }
+        }
+
+        return $products;
+    }
     private function toAmount(string $value): int
     {
         return number_format($value * 100, 0, '', '');
