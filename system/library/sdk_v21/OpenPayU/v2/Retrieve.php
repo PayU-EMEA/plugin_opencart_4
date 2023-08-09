@@ -10,7 +10,7 @@
 class OpenPayU_Retrieve extends OpenPayU
 {
 
-    const PAYMETHODS_SERVICE = 'paymethods?extended=true';
+    const PAYMETHODS_SERVICE = 'paymethods';
 
     /**
      * Get Pay Methods from POS
