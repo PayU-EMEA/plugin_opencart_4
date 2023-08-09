@@ -2,7 +2,7 @@
 namespace Opencart\Admin\Controller\Extension\PayU\Payment;
 class PayU extends \Opencart\System\Engine\Controller {
 
-    const PAYU_VERSION = '4.0.0';
+    const PAYU_VERSION = '4.0.1';
 
     public function index() {
         $this->load->language('extension/payu/payment/payu');
