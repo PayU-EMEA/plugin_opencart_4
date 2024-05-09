@@ -3,7 +3,7 @@
 namespace Opencart\Catalog\Controller\Extension\PayU\Payment;
 class PayU extends \Opencart\System\Engine\Controller
 {
-    const PAYU_VERSION = '4.0.1';
+    const PAYU_VERSION = '4.0.2';
 
     private \Opencart\System\Library\Log $logger;
 
