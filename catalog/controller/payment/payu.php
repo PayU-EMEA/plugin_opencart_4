@@ -39,13 +39,17 @@ class PayU extends \Opencart\System\Engine\Controller
         $this->load->language('extension/payu/payment/payu');
 
         $json = [];
-
         try {
             if (!isset($this->session->data['order_id'])) {
                 throw new \Exception($this->language->get('error_order_id'));
             }
 
-            if (!isset($this->session->data['payment_method']) || $this->session->data['payment_method'] != 'payu') {
+            if (!isset($this->session->data['payment_method']) ||
+                // For compatibility with Opencart < 4.0.2
+                is_array($this->session->data['payment_method'])
+                    ? $this->session->data['payment_method']['code'] !== 'payu.payu'
+                    : $this->session->data['payment_method'] !== 'payu'
+            ) {
                 throw new \Exception($this->language->get('error_payment_method'));
             }
 
@@ -58,31 +62,33 @@ class PayU extends \Opencart\System\Engine\Controller
             $json['error'] = $e->getMessage();
         }
 
-        $order = $this->buildOrder();
+        if (!$json) {
+            $order = $this->buildOrder();
 
-        try {
-            $response = \OpenPayU_Order::create($order);
-            if ($response->getStatus() === 'SUCCESS') {
-                $this->session->data['payu_order_id'] = $response->getResponse()->orderId;
+            try {
+                $response = \OpenPayU_Order::create($order);
+                if ($response->getStatus() === 'SUCCESS') {
+                    $this->session->data['payu_order_id'] = $response->getResponse()->orderId;
 
-                $this->load->model('checkout/order');
+                    $this->load->model('checkout/order');
 
-                $this->model_checkout_order->editTransactionId($this->session->data['order_id'], $response->getResponse()->orderId);
-                $this->model_checkout_order->addHistory($this->session->data['order_id'], $this->config->get('payment_payu_new_status'), 'PayU - order id [' . $response->getResponse()->orderId . ']');
+                    $this->model_checkout_order->editTransactionId($this->session->data['order_id'], $response->getResponse()->orderId);
+                    $this->model_checkout_order->addHistory($this->session->data['order_id'], $this->config->get('payment_payu_new_status'), 'PayU - order id [' . $response->getResponse()->orderId . ']');
 
-                $json['redirect'] = $response->getResponse()->redirectUri . '&lang=' . substr($this->config->get('config_language'), 0, 2);
-            } else {
+                    $json['redirect'] = $response->getResponse()->redirectUri . '&lang=' . substr($this->config->get('config_language'), 0, 2);
+                } else {
+                    $this->logger->write('OCR: ' . json_encode($order));
+                    $this->logger->write(
+                        $response->getError() . ' [response: ' . json_encode($response->getResponse()) . ']'
+                    );
+
+                    $json['error'] = $this->language->get('error_ocr') . ' (' . $response->getStatus() . ': ' . \OpenPayU_Util::statusDesc($response->getStatus()) . ')';
+                }
+            } catch (\OpenPayU_Exception $e) {
                 $this->logger->write('OCR: ' . json_encode($order));
-                $this->logger->write(
-                    $response->getError() . ' [response: ' . json_encode($response->getResponse()) . ']'
-                );
-
-                $json['error'] = $this->language->get('error_ocr') . ' (' . $response->getStatus() . ': ' . \OpenPayU_Util::statusDesc($response->getStatus()) . ')';
+                $this->logger->write('OCR Exception: ' . $e->getMessage());
+                $json['error'] = $this->language->get('error_ocr');
             }
-        } catch (\OpenPayU_Exception $e) {
-            $this->logger->write('OCR: ' . json_encode($order));
-            $this->logger->write('OCR Exception: ' . $e->getMessage());
-            $json['error'] = $this->language->get('error_ocr');
         }
 
         $this->response->addHeader('Content-Type: application/json');
